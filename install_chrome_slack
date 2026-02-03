@@ -1,0 +1,57 @@
+#!/bin/bash
+spin() {
+    local sp='/-\|'
+    local i=0
+    printf ' '
+    while true; do
+        printf "\b${sp:i++%${#sp}:1}"
+        sleep 0.1
+    done
+}
+
+run_with_spinner() {
+    local msg="$1"
+    shift
+
+    echo -n "$msg "
+    spin &
+    local SPIN_PID=$!
+
+    "$@" >/tmp/install.log 2>&1 #kalau ada error disini.
+    local status=$?
+
+    kill "$SPIN_PID" 2>/dev/null
+    wait "$SPIN_PID" 2>/dev/null
+
+    if [ $status -eq 0 ]; then
+        printf "\r%s ✅\n" "$msg"
+    else
+        printf "\r%s ❌\n" "$msg"
+	echo "Check log: /tmp/install.log"
+        exit $status
+    fi
+}
+
+run_with_spinner "Updating system..." sudo apt update -y
+run_with_spinner "Installing dependencies..." sudo apt install -y wget curl gnupg software-properties-common
+
+run_with_spinner "Adding Google Chrome key..." \
+    bash -c 'wget -qO- https://dl.google.com/linux/linux_signing_key.pub \
+    | gpg --dearmor \
+    | sudo tee /usr/share/keyrings/google-chrome.gpg >/dev/null'
+
+run_with_spinner "Adding Chrome repository..." \
+    bash -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" \
+    | sudo tee /etc/apt/sources.list.d/google-chrome.list >/dev/null'
+
+run_with_spinner "Installing Google Chrome..." sudo apt install -y google-chrome-stable
+
+run_with_spinner "Adding Slack key..." \
+	bash -c 'curl -fsSL https://packagecloud.io/slacktechnologies/slack/gpgkey \
+	| sudo gpg --dearmor -o /usr/share/keyrings/slack.gpg'
+
+run_with_spinner "Adding Slack repository..." \
+	bash -c 'echo "deb [signed-by=/usr/share/keyrings/slack.gpg] https://packagecloud.io/slacktechnologies/slack/debian/ jessie main" \
+	| sudo tee /etc/apt/sources.list.d/slack.list'
+
+run_with_spinner "Installing Slack Desktop..." sudo apt install -y slack-desktop
